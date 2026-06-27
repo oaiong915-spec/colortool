@@ -225,8 +225,9 @@ header.top .sub{color:var(--ink-dim); font-size:13px}
         <details class="apikey">
           <summary>⚙ GitHub Pages에 올릴 때 (API 키)</summary>
           <div class="body">
-            <input id="apikey" placeholder="sk-ant-... (선택)" spellcheck="false">
-            <p>Claude.ai 안에서는 키 없이 분석돼. GitHub Pages 등 외부에 배포해서 쓸 땐 본인 Anthropic 키를 여기 붙여넣어. 키는 이 브라우저에만 저장되고 코드에 박히지 않아 — 공개 저장소엔 절대 하드코딩하지 마.</p>
+            <input id="apikey" placeholder="sk-ant-... 여기에 붙여넣기" spellcheck="false">
+            <p id="keyStatus" style="color:var(--accent);font-size:11px;margin:7px 0 0">키를 붙여넣으면 자동 저장돼. 따로 등록 버튼 없어도 바로 분석에 쓰여.</p>
+            <p>키는 이 브라우저에만 저장되고 코드·저장소엔 안 박혀. 공개 저장소엔 절대 하드코딩하지 마. 분석 한 번당 네 API 사용량(요금)이 나가.</p>
           </div>
         </details>
       </div>
@@ -532,6 +533,11 @@ function renderResult(j){
 
 /* ============ 시작 ============ */
 syncFromHsv(); renderPal();
-const savedKey=store.get('ctv2_key'); if(savedKey)document.getElementById('apikey').value=savedKey;
-document.getElementById('apikey').addEventListener('change',e=>store.set('ctv2_key',e.target.value.trim()));
+const keyIn=document.getElementById('apikey'), keyStatus=document.getElementById('keyStatus');
+const savedKey=store.get('ctv2_key');
+if(savedKey){ keyIn.value=savedKey; keyStatus.textContent='✓ 저장된 키 사용 중 (이 브라우저)'; }
+keyIn.addEventListener('input',()=>{
+  const v=keyIn.value.trim(); store.set('ctv2_key',v);
+  keyStatus.textContent = v ? '✓ 키 저장됨 — 바로 분석에 쓰여 (이 브라우저에만)' : '키를 붙여넣으면 자동 저장돼.';
+});
 </script>
