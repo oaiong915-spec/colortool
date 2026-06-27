@@ -1,0 +1,537 @@
+<!-- 컬러툴 v2 — 반사광/환경광 분석 + 수동 피커 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>컬러툴 · 빛과 반사광</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
+:root{
+  --bg:#16161a; --panel:#1f1f24; --panel-2:#26262c; --line:#34343c;
+  --ink:#eceae4; --ink-dim:#9b988f; --ink-faint:#67645d;
+  --accent:#71c2b3;            /* 스크린샷에서 찍힌 그 청록 */
+  --accent-soft:#3a5a55;
+  --warn:#d98a6a;
+  --radius:14px;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Pretendard',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  -webkit-font-smoothing:antialiased; line-height:1.5;
+}
+.wrap{max-width:1240px; margin:0 auto; padding:22px 18px 80px}
+header.top{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:18px}
+header.top h1{font-size:18px; font-weight:700; letter-spacing:-.01em; margin:0}
+header.top .sub{color:var(--ink-dim); font-size:13px}
+.layout{display:grid; grid-template-columns:1fr 332px; gap:18px; align-items:start}
+@media(max-width:880px){ .layout{grid-template-columns:1fr} }
+
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius)}
+.card .hd{padding:13px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px}
+.card .hd b{font-size:13px; font-weight:600; letter-spacing:.01em}
+.card .hd .tag{margin-left:auto; font-size:11px; color:var(--ink-faint)}
+.card .bd{padding:16px}
+
+/* ---------- 좌측: 이미지 + 분석 ---------- */
+.drop{
+  border:1.5px dashed var(--line); border-radius:12px; min-height:200px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:10px; color:var(--ink-dim); font-size:13px; text-align:center; padding:24px;
+  cursor:pointer; transition:border-color .15s, background .15s; position:relative;
+}
+.drop:hover, .drop.over{border-color:var(--accent); background:#1c1f1e}
+.drop .big{font-size:30px; opacity:.5}
+#imgWrap{display:none; position:relative}
+#imgCanvas{max-width:100%; border-radius:12px; display:block; cursor:crosshair}
+.imgbar{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}
+
+.note-in{
+  width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+  border-radius:10px; padding:10px 12px; font-family:var(--sans); font-size:13px;
+  resize:vertical; min-height:46px; margin-top:12px;
+}
+.note-in::placeholder{color:var(--ink-faint)}
+
+.btn{
+  appearance:none; border:1px solid var(--line); background:var(--panel-2); color:var(--ink);
+  border-radius:10px; padding:9px 14px; font-family:var(--sans); font-size:13px; font-weight:500;
+  cursor:pointer; transition:.13s; display:inline-flex; align-items:center; gap:7px;
+}
+.btn:hover{border-color:var(--ink-dim)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#0f1413; font-weight:600}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.primary:disabled{opacity:.5; cursor:default; filter:none}
+.btn.ghost{background:transparent}
+
+.analyze-row{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center}
+.status{font-size:12px; color:var(--ink-dim)}
+.status.err{color:var(--warn)}
+
+/* 분석 결과 */
+.result{margin-top:18px; display:none}
+.scene{font-size:13px; color:var(--ink-dim); margin:0 0 16px; padding:11px 13px;
+  background:var(--panel-2); border-radius:10px; border-left:3px solid var(--accent)}
+.group{margin-bottom:18px}
+.group h4{font-size:12px; font-weight:600; color:var(--ink-dim); margin:0 0 9px;
+  text-transform:uppercase; letter-spacing:.06em}
+.swatches{display:flex; gap:8px; flex-wrap:wrap}
+.sw{
+  width:118px; border:1px solid var(--line); border-radius:10px; overflow:hidden;
+  cursor:pointer; background:var(--panel-2); transition:transform .1s, border-color .1s;
+}
+.sw:hover{transform:translateY(-2px); border-color:var(--accent)}
+.sw .chip{height:46px}
+.sw .meta{padding:6px 8px}
+.sw .meta .role{font-size:11px; font-weight:600; color:var(--ink)}
+.sw .meta .hex{font-size:10.5px; font-family:var(--mono); color:var(--ink-dim)}
+.sw .meta .nt{font-size:10.5px; color:var(--ink-faint); margin-top:2px; line-height:1.35}
+.surface-name{font-size:12.5px; font-weight:600; color:var(--accent); margin:0 0 8px}
+.surface{padding:12px; background:#1a1a1e; border-radius:11px; margin-bottom:10px; border:1px solid var(--line)}
+
+/* ---------- 우측: 피커 ---------- */
+.picker{position:sticky; top:18px}
+.wheel-wrap{display:flex; justify-content:center; padding:4px 0 14px}
+#wheel{touch-action:none; cursor:crosshair}
+.preview{display:flex; align-items:center; gap:12px; margin:2px 0 14px}
+.preview .big-chip{width:54px; height:54px; border-radius:11px; border:1px solid var(--line); flex:none}
+.preview .vals{font-family:var(--mono); font-size:12px; color:var(--ink-dim); line-height:1.7}
+.hexline{display:flex; align-items:center; gap:8px; margin-bottom:14px}
+.hexline input{
+  flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+  border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:13px; letter-spacing:.04em;
+}
+
+.slider{margin-bottom:11px}
+.slider .lab{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-dim); margin-bottom:4px}
+.slider .lab b{color:var(--ink); font-weight:600}
+.track{position:relative; height:18px; border-radius:9px; border:1px solid var(--line); overflow:hidden}
+.track input[type=range]{
+  -webkit-appearance:none; appearance:none; position:absolute; inset:0; width:100%; height:100%;
+  background:transparent; margin:0; cursor:pointer;
+}
+.track input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:10px; height:24px; border-radius:4px;
+  background:#fff; border:1px solid rgba(0,0,0,.4); box-shadow:0 0 3px rgba(0,0,0,.5); cursor:grab;
+}
+.track input[type=range]::-moz-range-thumb{
+  width:10px; height:24px; border-radius:4px; background:#fff; border:1px solid rgba(0,0,0,.4); cursor:grab;
+}
+.num{width:50px; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+  border-radius:7px; padding:5px 6px; font-family:var(--mono); font-size:12px; text-align:center}
+
+.tools{display:flex; gap:8px; margin:6px 0 16px}
+.tools .btn{flex:1; justify-content:center; padding:9px 8px}
+
+.palette h4{font-size:12px; font-weight:600; color:var(--ink-dim); margin:0 0 9px;
+  display:flex; align-items:center; gap:8px}
+.palette h4 .add{margin-left:auto; cursor:pointer; color:var(--accent); font-size:12px}
+.pal-grid{display:flex; flex-wrap:wrap; gap:6px}
+.pal-chip{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); cursor:pointer; position:relative}
+.pal-chip:hover{outline:2px solid var(--accent); outline-offset:1px}
+.pal-empty{font-size:12px; color:var(--ink-faint)}
+
+.apikey{margin-top:16px; padding-top:14px; border-top:1px solid var(--line)}
+.apikey summary{font-size:11.5px; color:var(--ink-faint); cursor:pointer; list-style:none}
+.apikey summary::-webkit-details-marker{display:none}
+.apikey .body{margin-top:10px}
+.apikey input{width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+  border-radius:9px; padding:8px 10px; font-family:var(--mono); font-size:12px}
+.apikey p{font-size:11px; color:var(--ink-faint); line-height:1.5; margin:8px 0 0}
+
+.hidden{display:none!important}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>컬러툴</h1>
+    <span class="sub">빛 · 환경광 · 반사광 분석 + 수동 피커</span>
+  </header>
+
+  <div class="layout">
+    <!-- ===== 좌측 ===== -->
+    <section class="card">
+      <div class="hd"><b>레퍼런스 분석</b><span class="tag">사진 / 일러스트</span></div>
+      <div class="bd">
+        <div class="drop" id="drop">
+          <input type="file" id="file" accept="image/*" class="hidden">
+          <div class="big">⊕</div>
+          <div>이미지를 끌어다 놓거나 클릭해서 올려</div>
+          <div style="font-size:11.5px;color:var(--ink-faint)">올린 그림 위를 클릭하면 그 픽셀 색을 바로 스포이드해</div>
+        </div>
+
+        <div id="imgWrap">
+          <canvas id="imgCanvas"></canvas>
+          <div class="imgbar">
+            <button class="btn ghost" id="changeImg">다른 이미지</button>
+            <span class="status" id="pickHint">그림 위를 클릭 = 스포이드</span>
+          </div>
+        </div>
+
+        <textarea class="note-in" id="note" placeholder="선생님 원칙이나 이 그림에 대한 설명을 같이 적어주면 더 정확해져 (예: 노을빛 역광, 실내 형광등, 차가운 그림자로)"></textarea>
+
+        <div class="analyze-row">
+          <button class="btn primary" id="analyze" disabled>빛·반사광 분석</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim);cursor:pointer">
+            <input type="checkbox" id="auto" checked style="accent-color:var(--accent)"> 올리면 바로 분석
+          </label>
+          <span class="status" id="status"></span>
+        </div>
+
+        <div class="result" id="result"></div>
+      </div>
+    </section>
+
+    <!-- ===== 우측: 피커 ===== -->
+    <section class="card picker">
+      <div class="hd"><b>컬러 피커</b><span class="tag" id="modeTag">HSV</span></div>
+      <div class="bd">
+        <div class="wheel-wrap"><canvas id="wheel" width="280" height="280"></canvas></div>
+
+        <div class="preview">
+          <div class="big-chip" id="bigChip"></div>
+          <div class="vals" id="vals"></div>
+        </div>
+
+        <div class="hexline">
+          <input id="hex" value="#71C2B3" spellcheck="false">
+          <button class="btn ghost" id="copyHex" title="복사">복사</button>
+        </div>
+
+        <div class="slider" data-ch="r">
+          <div class="lab"><span>R</span><b id="rVal">113</b></div>
+          <div class="track"><input type="range" min="0" max="255" value="113" id="r"></div>
+        </div>
+        <div class="slider" data-ch="g">
+          <div class="lab"><span>G</span><b id="gVal">194</b></div>
+          <div class="track"><input type="range" min="0" max="255" value="194" id="g"></div>
+        </div>
+        <div class="slider" data-ch="b">
+          <div class="lab"><span>B</span><b id="bVal">179</b></div>
+          <div class="track"><input type="range" min="0" max="255" value="179" id="b"></div>
+        </div>
+
+        <div class="tools">
+          <button class="btn" id="eyedrop">🩹 화면 스포이드</button>
+        </div>
+
+        <div class="palette">
+          <h4>저장한 색 <span class="add" id="savePal">+ 현재색 저장</span></h4>
+          <div class="pal-grid" id="palGrid"><span class="pal-empty">아직 없음</span></div>
+        </div>
+
+        <details class="apikey">
+          <summary>⚙ GitHub Pages에 올릴 때 (API 키)</summary>
+          <div class="body">
+            <input id="apikey" placeholder="sk-ant-... (선택)" spellcheck="false">
+            <p>Claude.ai 안에서는 키 없이 분석돼. GitHub Pages 등 외부에 배포해서 쓸 땐 본인 Anthropic 키를 여기 붙여넣어. 키는 이 브라우저에만 저장되고 코드에 박히지 않아 — 공개 저장소엔 절대 하드코딩하지 마.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ============ 저장소 (artifact 미리보기에서도 안 깨지게) ============ */
+const _mem={};
+const store={
+  get(k){ try{return localStorage.getItem(k)}catch(e){return _mem[k]??null} },
+  set(k,v){ try{localStorage.setItem(k,v)}catch(e){_mem[k]=v} }
+};
+
+/* ============ 색 변환 ============ */
+function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
+function rgbToHex(r,g,b){return '#'+[r,g,b].map(x=>clamp(Math.round(x),0,255).toString(16).padStart(2,'0')).join('').toUpperCase()}
+function hexToRgb(h){h=h.replace('#','').trim(); if(h.length===3)h=h.split('').map(c=>c+c).join(''); if(!/^[0-9a-fA-F]{6}$/.test(h))return null; return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}
+function rgbToHsv(r,g,b){
+  r/=255;g/=255;b/=255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0; if(d){ if(mx===r)h=((g-b)/d)%6; else if(mx===g)h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; if(h<0)h+=360; }
+  return{h, s:mx?d/mx:0, v:mx};
+}
+function hsvToRgb(h,s,v){
+  h=((h%360)+360)%360; const c=v*s, x=c*(1-Math.abs((h/60)%2-1)), m=v-c; let r,g,b;
+  if(h<60)[r,g,b]=[c,x,0]; else if(h<120)[r,g,b]=[x,c,0]; else if(h<180)[r,g,b]=[0,c,x];
+  else if(h<240)[r,g,b]=[0,x,c]; else if(h<300)[r,g,b]=[x,0,c]; else [r,g,b]=[c,0,x];
+  return{r:(r+m)*255, g:(g+m)*255, b:(b+m)*255};
+}
+
+/* ============ 상태 ============ */
+let cur={h:165,s:.42,v:.76};   // 시작색 ≈ 스크린샷의 청록
+function curRgb(){return hsvToRgb(cur.h,cur.s,cur.v)}
+
+/* ============ 컬러휠 (색상환 링 + SV 사각형) ============ */
+const wheel=document.getElementById('wheel'), wctx=wheel.getContext('2d');
+const W=280, CX=W/2, CY=W/2, R_OUT=132, R_IN=104, SQ=128; // 사각형 한 변
+const ringCanvas=document.createElement('canvas'); ringCanvas.width=W; ringCanvas.height=W;
+(function buildRing(){
+  const rc=ringCanvas.getContext('2d'), img=rc.createImageData(W,W), d=img.data;
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){
+    const dx=x-CX, dy=y-CY, dist=Math.hypot(dx,dy), i=(y*W+x)*4;
+    if(dist>=R_IN-1 && dist<=R_OUT+1){
+      let ang=Math.atan2(dy,dx)*180/Math.PI; if(ang<0)ang+=360;
+      const c=hsvToRgb(ang,1,1);
+      const aa=clamp(Math.min(dist-(R_IN-1),(R_OUT+1)-dist,1),0,1); // 가장자리 안티앨리어싱
+      d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; d[i+3]=255*aa;
+    }
+  }
+  rc.putImageData(img,0,0);
+})();
+
+function drawWheel(){
+  wctx.clearRect(0,0,W,W);
+  wctx.drawImage(ringCanvas,0,0);
+  // 현재 hue 마커 (링 위)
+  const a=cur.h*Math.PI/180, rm=(R_IN+R_OUT)/2;
+  const mx=CX+Math.cos(a)*rm, my=CY+Math.sin(a)*rm;
+  wctx.save(); wctx.translate(mx,my); wctx.rotate(a);
+  wctx.strokeStyle='#fff'; wctx.lineWidth=2.5; wctx.strokeRect(-14,-4,28,8);
+  wctx.strokeStyle='rgba(0,0,0,.5)'; wctx.lineWidth=1; wctx.strokeRect(-15,-5,30,10);
+  wctx.restore();
+  // SV 사각형
+  const sx=CX-SQ/2, sy=CY-SQ/2;
+  const base=hsvToRgb(cur.h,1,1);
+  wctx.fillStyle=`rgb(${base.r|0},${base.g|0},${base.b|0})`; wctx.fillRect(sx,sy,SQ,SQ);
+  let gx=wctx.createLinearGradient(sx,0,sx+SQ,0);
+  gx.addColorStop(0,'#fff'); gx.addColorStop(1,'rgba(255,255,255,0)');
+  wctx.fillStyle=gx; wctx.fillRect(sx,sy,SQ,SQ);
+  let gy=wctx.createLinearGradient(0,sy,0,sy+SQ);
+  gy.addColorStop(0,'rgba(0,0,0,0)'); gy.addColorStop(1,'#000');
+  wctx.fillStyle=gy; wctx.fillRect(sx,sy,SQ,SQ);
+  // 사각형 테두리 + SV 마커
+  wctx.strokeStyle='rgba(255,255,255,.15)'; wctx.lineWidth=1; wctx.strokeRect(sx+.5,sy+.5,SQ-1,SQ-1);
+  const px=sx+cur.s*SQ, py=sy+(1-cur.v)*SQ;
+  wctx.beginPath(); wctx.arc(px,py,6,0,7); wctx.strokeStyle='#fff'; wctx.lineWidth=2; wctx.stroke();
+  wctx.beginPath(); wctx.arc(px,py,7.5,0,7); wctx.strokeStyle='rgba(0,0,0,.5)'; wctx.lineWidth=1; wctx.stroke();
+}
+
+let dragMode=null;
+function wheelPos(e){const r=wheel.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return{x:(t.clientX-r.left)*(W/r.width), y:(t.clientY-r.top)*(W/r.height)}}
+function onWheelDown(e){
+  e.preventDefault(); const p=wheelPos(e); const dx=p.x-CX, dy=p.y-CY, dist=Math.hypot(dx,dy);
+  const sx=CX-SQ/2, sy=CY-SQ/2;
+  if(p.x>=sx&&p.x<=sx+SQ&&p.y>=sy&&p.y<=sy+SQ){ dragMode='sv'; }
+  else if(dist>=R_IN-12&&dist<=R_OUT+12){ dragMode='hue'; }
+  if(dragMode) onWheelMove(e);
+}
+function onWheelMove(e){
+  if(!dragMode)return; e.preventDefault(); const p=wheelPos(e);
+  if(dragMode==='hue'){ let ang=Math.atan2(p.y-CY,p.x-CX)*180/Math.PI; if(ang<0)ang+=360; cur.h=ang; }
+  else{ const sx=CX-SQ/2, sy=CY-SQ/2; cur.s=clamp((p.x-sx)/SQ,0,1); cur.v=clamp(1-(p.y-sy)/SQ,0,1); }
+  syncFromHsv();
+}
+function onWheelUp(){dragMode=null}
+wheel.addEventListener('mousedown',onWheelDown); window.addEventListener('mousemove',onWheelMove); window.addEventListener('mouseup',onWheelUp);
+wheel.addEventListener('touchstart',onWheelDown,{passive:false}); wheel.addEventListener('touchmove',onWheelMove,{passive:false}); wheel.addEventListener('touchend',onWheelUp);
+
+/* ============ 동기화 ============ */
+function syncFromHsv(){ const c=curRgb(); paint(c); }
+function paint(c){
+  const r=Math.round(c.r), g=Math.round(c.g), b=Math.round(c.b);
+  document.getElementById('r').value=r; document.getElementById('g').value=g; document.getElementById('b').value=b;
+  document.getElementById('rVal').textContent=r; document.getElementById('gVal').textContent=g; document.getElementById('bVal').textContent=b;
+  const hex=rgbToHex(r,g,b);
+  document.getElementById('hex').value=hex;
+  document.getElementById('bigChip').style.background=hex;
+  document.getElementById('vals').innerHTML=
+    `H ${Math.round(cur.h)}&nbsp; S ${Math.round(cur.s*100)}&nbsp; V ${Math.round(cur.v*100)}<br>R ${r}&nbsp; G ${g}&nbsp; B ${b}`;
+  // 슬라이더 트랙 그라데이션
+  setTrack('r',`rgb(0,${g},${b})`,`rgb(255,${g},${b})`);
+  setTrack('g',`rgb(${r},0,${b})`,`rgb(${r},255,${b})`);
+  setTrack('b',`rgb(${r},${g},0)`,`rgb(${r},${g},255)`);
+  drawWheel();
+}
+function setTrack(ch,a,b){ document.querySelector(`.slider[data-ch=${ch}] .track`).style.background=`linear-gradient(90deg,${a},${b})`; }
+function setRgb(r,g,b){ cur=rgbToHsv(r,g,b); paint({r,g,b}); }
+function setHex(hex){ const c=hexToRgb(hex); if(c) setRgb(c.r,c.g,c.b); }
+
+/* RGB 슬라이더 */
+['r','g','b'].forEach(ch=>{
+  document.getElementById(ch).addEventListener('input',()=>{
+    const r=+document.getElementById('r').value, g=+document.getElementById('g').value, b=+document.getElementById('b').value;
+    setRgb(r,g,b);
+  });
+});
+/* HEX 입력 */
+document.getElementById('hex').addEventListener('change',e=>setHex(e.target.value));
+document.getElementById('copyHex').addEventListener('click',()=>{ navigator.clipboard?.writeText(document.getElementById('hex').value); });
+
+/* ============ 스포이드 ============ */
+document.getElementById('eyedrop').addEventListener('click',async()=>{
+  if(window.EyeDropper){ try{ const ed=new EyeDropper(); const r=await ed.open(); setHex(r.sRGBHex); }catch(e){} }
+  else alert('이 브라우저는 화면 스포이드(EyeDropper)를 지원하지 않아. 크롬/엣지에서 써줘. 올린 이미지 위 클릭은 어디서든 돼.');
+});
+
+/* ============ 팔레트 ============ */
+const PAL_KEY='ctv2_palette';
+function loadPal(){ try{return JSON.parse(store.get(PAL_KEY)||'[]')}catch(e){return[]} }
+function savePalArr(a){ store.set(PAL_KEY,JSON.stringify(a)) }
+function renderPal(){
+  const a=loadPal(), grid=document.getElementById('palGrid');
+  if(!a.length){ grid.innerHTML='<span class="pal-empty">아직 없음</span>'; return; }
+  grid.innerHTML='';
+  a.forEach((hex,i)=>{
+    const d=document.createElement('div'); d.className='pal-chip'; d.style.background=hex; d.title=hex+' (클릭=적용 · 더블클릭=삭제)';
+    d.addEventListener('click',()=>setHex(hex));
+    d.addEventListener('dblclick',()=>{ const arr=loadPal(); arr.splice(i,1); savePalArr(arr); renderPal(); });
+    grid.appendChild(d);
+  });
+}
+document.getElementById('savePal').addEventListener('click',()=>{
+  const a=loadPal(), hex=document.getElementById('hex').value; if(!a.includes(hex))a.unshift(hex); savePalArr(a.slice(0,40)); renderPal();
+});
+
+/* ============ 이미지 업로드 + 픽셀 스포이드 ============ */
+const drop=document.getElementById('drop'), fileIn=document.getElementById('file');
+const imgWrap=document.getElementById('imgWrap'), imgCanvas=document.getElementById('imgCanvas'), ictx=imgCanvas.getContext('2d',{willReadFrequently:true});
+let imgB64=null, imgMime='image/png';
+drop.addEventListener('click',()=>fileIn.click());
+document.getElementById('changeImg').addEventListener('click',()=>fileIn.click());
+drop.addEventListener('dragover',e=>{e.preventDefault(); drop.classList.add('over')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])});
+fileIn.addEventListener('change',e=>{ if(e.target.files[0])handleFile(e.target.files[0]) });
+function handleFile(f){
+  imgMime=f.type||'image/png';
+  const rd=new FileReader();
+  rd.onload=()=>{
+    imgB64=rd.result.split(',')[1];
+    const im=new Image();
+    im.onload=()=>{
+      const maxW=620, scale=Math.min(1,maxW/im.width);
+      imgCanvas.width=im.width*scale; imgCanvas.height=im.height*scale;
+      ictx.drawImage(im,0,0,imgCanvas.width,imgCanvas.height);
+      drop.classList.add('hidden'); imgWrap.style.display='block';
+      document.getElementById('analyze').disabled=false;
+      if(document.getElementById('auto').checked) analyze();
+    };
+    im.src=rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+imgCanvas.addEventListener('click',e=>{
+  const r=imgCanvas.getBoundingClientRect();
+  const x=(e.clientX-r.left)*(imgCanvas.width/r.width), y=(e.clientY-r.top)*(imgCanvas.height/r.height);
+  const p=ictx.getImageData(x,y,1,1).data; setRgb(p[0],p[1],p[2]);
+  document.getElementById('pickHint').textContent=`찍음 → ${rgbToHex(p[0],p[1],p[2])}`;
+});
+
+/* ============ AI 분석 ============ */
+const SYS=`당신은 디지털 일러스트 채색을 돕는 색채 분석가입니다. 사용자가 준 이미지(사진/일러스트)를 보고 특정 화풍에 맞춰 빛·환경광·반사광 색을 계산합니다. 밑색은 사용자가 직접 정하므로, 광원·환경광·반사광·보색반사광·그림자 색에 집중합니다.
+
+이 화풍은 실제 작품을 픽셀 분석해서 도출한 규칙을 따릅니다. 반드시 지키세요:
+
+[채도 규율] 화면 대부분은 채도가 낮습니다. 제시하는 색의 채도(HSV의 S)는 대체로 0.15~0.30에 두고, 높은 채도(0.40~0.60)는 작은 강조 부위에만 씁니다. 탁하지 않고 맑게 — 채도를 올리는 대신 색조를 분리해서 생동감을 냅니다.
+
+[명도 대비] 빛 받는 면과 그림자 면의 명도를 크게 벌립니다. 빛 면 V는 0.85~0.99, 그림자 면 V는 그림의 키에 따라 0.20~0.50. 쨍함은 채도가 아니라 이 명도 대비 + 빛/그림자 색조 분리에서 나옵니다.
+
+[그림자 색 — 가장 중요] 그림자는 절대 무채색 회색이 아닙니다. 그림자 색조는 광원/환경을 따라 결정됩니다:
+ · 강한 단색 광원(예: 청록 조명, 적색 네온)이 있으면 → 그림자는 그 광원의 보색 방향으로 기웁니다. (청록광→보라 그림자, 적색광→연두·녹 그림자)
+ · 광원 온도가 넓게 깔린 장면(따뜻한 햇빛 등)이면 → 그림자도 그 온도를 유지하되(따뜻한 빛=따뜻한 그림자) 명도만 크게 떨어뜨립니다.
+ · 야외 쿨톤이면 하늘의 청록/파랑이 그림자에 스며듭니다.
+ · 그림자 채도는 0.10~0.25 정도. 약하지만 0은 아닙니다.
+
+[빛 색] 빛 면은 광원색을 띱니다(따뜻한 햇빛=노랑끼 도는 고명도, 청록 조명=청록, 적색 네온=따뜻한 빨강). 명도는 매우 높게.
+
+[반사광] 밑색(또는 그 면의 기준색)에서 출발해 색상환 위를 환경색 방향으로 호를 따라 살짝만 이동하고 채도를 조금 올린 색입니다. 명도는 기준색과 거의 같게 유지하고, 빛보다 밝지 않으며, 기준색에서 자연스럽게 이어집니다. 이질적인 색을 갖다 붙이지 않습니다.
+
+[보색 반사광] 같은 원리로 환경색의 보색 방향으로 이동시킨 색이며, 반사광과 그림자의 경계면에 들어갑니다.
+
+[핵심] 빛↔그림자는 온도/색의 분리가 엔진입니다. 따뜻한 빛↔차가운 그림자, 또는 단색광↔보색 그림자. 이 분리를 분명히 하세요.
+
+[작업 방식] 먼저 이미지의 배경·환경을 읽어 광원과 환경광을 판단합니다. 그다음 반사광은 배경의 구체적 출처(지면, 하늘, 주변 식생·벽·사물 등)에서 캐릭터/대상으로 튀어오는 바운스 색으로, 출처를 명시해서 제시합니다(2~4개). 보색 반사광은 그 환경색의 보색 방향(1~2개). surfaces는 선택 — 이 환경광을 일반 표면(예: 피부, 흰 옷)에 적용했을 때 빛 면/그림자 면이 어떻게 되는지 예시 1~2개만.
+
+반드시 아래 JSON만 출력하세요. 마크다운·코드펜스·설명문 없이 순수 JSON. 모든 색은 #RRGGBB.
+{
+ "scene":"배경/광원 요약 + 빛↔그림자 온도 분리 방향",
+ "light":{"hex":"#......","note":"광원 색·온도·방향"},
+ "ambient":{"sky":{"hex":"#......","note":"하늘에서 오는 환경광"},"ground":{"hex":"#......","note":"지면 반사 환경광"},"air":{"hex":"#......","note":"대기·원근감 색"}},
+ "reflect":[{"source":"지면/하늘/왼쪽 붉은 벽 등 구체적 출처","hex":"#......","note":"이 바운스가 닿는 부위·세기"}],
+ "comp":[{"source":"보색 방향 출처","hex":"#......","note":"반사광·그림자 경계에 드는 보색 반사광"}],
+ "surfaces":[{"name":"표면 예시","light":{"hex":"#......","note":"빛 면"},"shadow":{"hex":"#......","note":"그림자 면(색조 명시)"}}],
+ "advice":"이 환경 기준 채색 조언 한두 줄"
+}`;
+
+document.getElementById('analyze').addEventListener('click',analyze);
+async function analyze(){
+  if(!imgB64) return;
+  const st=document.getElementById('status'), btn=document.getElementById('analyze');
+  st.className='status'; st.textContent='분석 중… (빛/환경광 계산)'; btn.disabled=true;
+  const note=document.getElementById('note').value.trim();
+  const userText='이 이미지를 분석해줘.'+(note?(' 참고: '+note):'');
+  const key=document.getElementById('apikey').value.trim();
+  try{
+    const headers={'Content-Type':'application/json'};
+    if(key){ headers['x-api-key']=key; headers['anthropic-version']='2023-06-01'; headers['anthropic-dangerous-direct-browser-access']='true'; }
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST', headers,
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:2000, system:SYS,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:imgMime,data:imgB64}},
+          {type:'text',text:userText}
+        ]}]
+      })
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+    const clean=txt.replace(/```json|```/g,'').trim();
+    const j=JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}')+1));
+    renderResult(j); st.textContent='';
+  }catch(err){
+    st.className='status err';
+    st.textContent='분석 실패: '+err.message+' · (외부 배포본이면 우측 하단에 API 키를 넣어줘)';
+  }finally{ btn.disabled=false; }
+}
+
+function chip(role,obj){
+  const hex=(obj.hex||'#000').toUpperCase();
+  return `<div class="sw" data-hex="${hex}">
+    <div class="chip" style="background:${hex}"></div>
+    <div class="meta"><div class="role">${role}</div><div class="hex">${hex}</div>
+    ${obj.note?`<div class="nt">${obj.note}</div>`:''}</div></div>`;
+}
+function renderResult(j){
+  const R=document.getElementById('result'); let h='';
+  if(j.scene) h+=`<div class="scene">${j.scene}</div>`;
+  // 광원 · 환경광
+  if(j.light||j.ambient){
+    h+='<div class="group"><h4>광원 · 환경광</h4><div class="swatches">';
+    if(j.light) h+=chip('빛(광원)',j.light);
+    if(j.ambient){ if(j.ambient.sky)h+=chip('하늘',j.ambient.sky); if(j.ambient.ground)h+=chip('바닥',j.ambient.ground); if(j.ambient.air)h+=chip('공기',j.ambient.air); }
+    h+='</div></div>';
+  }
+  // 반사광 (출처별)
+  if(j.reflect&&j.reflect.length){
+    h+='<div class="group"><h4>반사광 · 출처별 바운스</h4><div class="swatches">';
+    j.reflect.forEach(o=>h+=chip(o.source||'반사광',o));
+    h+='</div></div>';
+  }
+  // 보색 반사광
+  if(j.comp&&j.comp.length){
+    h+='<div class="group"><h4>보색 반사광 · 경계면</h4><div class="swatches">';
+    j.comp.forEach(o=>h+=chip(o.source||'보색 반사광',o));
+    h+='</div></div>';
+  }
+  // 표면 적용 예시 (선택)
+  (j.surfaces||[]).forEach(s=>{
+    h+=`<div class="surface"><div class="surface-name">적용 예시 · ${s.name||'표면'}</div><div class="swatches">`;
+    if(s.light)h+=chip('빛 면',s.light);
+    if(s.reflect)h+=chip('반사광',s.reflect);
+    if(s.comp)h+=chip('보색 반사광',s.comp);
+    if(s.shadow)h+=chip('그림자 면',s.shadow);
+    h+='</div></div>';
+  });
+  if(j.advice) h+=`<div class="scene" style="border-left-color:var(--warn)">${j.advice}</div>`;
+  R.innerHTML=h; R.style.display='block';
+  R.querySelectorAll('.sw').forEach(el=>el.addEventListener('click',()=>setHex(el.dataset.hex)));
+}
+
+/* ============ 시작 ============ */
+syncFromHsv(); renderPal();
+const savedKey=store.get('ctv2_key'); if(savedKey)document.getElementById('apikey').value=savedKey;
+document.getElementById('apikey').addEventListener('change',e=>store.set('ctv2_key',e.target.value.trim()));
+</script>
